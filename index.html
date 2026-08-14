@@ -748,12 +748,12 @@ function renderMap(){
       path.style.stroke = matched.color;
       path.style.strokeWidth = '1.4';
     }
-    path.addEventListener('mouseenter', ()=>{ if(!isTouchDevice) showTooltip(p, list); });
+    path.addEventListener('mouseenter', (e)=>{ if(!isTouchDevice) showTooltip(p, list, e.clientX, e.clientY); });
     path.addEventListener('mouseleave', ()=>{ if(!isTouchDevice) scheduleHideTooltip(); });
     path.addEventListener('click', (e)=>{
       e.stopPropagation();
       clearTimeout(tooltipHideTimer);
-      showTooltip(p, list);
+      showTooltip(p, list, e.clientX, e.clientY);
     });
     // 일부 모바일 환경(특히 iframe 안에 임베드된 경우)에서는 합성 click 이벤트가 씹히는 경우가 있어,
     // pointerdown/pointerup 좌표 차이로 직접 '탭'을 감지하는 보조 경로를 둡니다.
@@ -764,7 +764,7 @@ function renderMap(){
       if(dx < 10 && dy < 10){
         e.stopPropagation();
         clearTimeout(tooltipHideTimer);
-        showTooltip(p, list);
+        showTooltip(p, list, e.clientX, e.clientY);
       }
     });
     gPaths.appendChild(path);
@@ -856,7 +856,7 @@ function renderFactoryList(){
   });
 }
 
-function showTooltip(prov, list){
+function showTooltip(prov, list, anchorX, anchorY){
   clearTimeout(tooltipHideTimer);
   if(list.length){
     tooltip.innerHTML = `<div class="prov">${prov.name}</div>` + list.map(f=>{
@@ -874,14 +874,24 @@ function showTooltip(prov, list){
   }
   tooltip.hidden = false;
 
-  const pt = svg.createSVGPoint();
-  pt.x = prov.cx; pt.y = prov.cy;
-  const ctm = svg.getScreenCTM();
-  const screenPt = pt.matrixTransform(ctm);
+  // 탭/클릭한 실제 화면 좌표가 있으면 그걸 그대로 사용합니다 (스크롤/뷰포트 변화에 안전).
+  // 없으면(예: 초기 호출) 지역 중심 좌표를 화면 좌표로 변환해서 사용합니다.
+  let px, py;
+  if(typeof anchorX === 'number' && typeof anchorY === 'number'){
+    px = anchorX; py = anchorY;
+  }else{
+    const pt = svg.createSVGPoint();
+    pt.x = prov.cx; pt.y = prov.cy;
+    const ctm = svg.getScreenCTM();
+    const screenPt = pt.matrixTransform(ctm);
+    px = screenPt.x; py = screenPt.y;
+  }
 
   const rect = tooltip.getBoundingClientRect();
-  let left = screenPt.x - rect.width/2;
-  let top = screenPt.y - rect.height - 14;
+  let left = px - rect.width/2;
+  let top = py - rect.height - 14;
+  if(top < 8){ top = py + 14; } // 위쪽 공간이 부족하면 탭 지점 아래쪽에 표시
+  top = Math.min(top, window.innerHeight - rect.height - 8);
   left = Math.max(8, Math.min(left, window.innerWidth - rect.width - 8));
   top = Math.max(8, top);
   tooltip.style.left = left+'px';
